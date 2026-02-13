@@ -1,0 +1,82 @@
+on quit:
+	if ({FREEZE::freezed::%uuid of player%} is true):
+		send "&dStaff&8>&f Player &6%getDisplayName(player)%&f logged off while frozen and was &4&lbanned&f." to console and all players where [input has permission "cwsb.freeze.ban_alerts"]
+		execute console command "/ban %player% 7d Rule 0.2 - Custom Punishment, Logged out while frozen @ -s"
+		delete {FREEZE::freezed::%uuid of player%}
+
+on player move:
+	if ({FREEZE::freezed::%uuid of player%} is true):
+		cancel event
+
+on inventory open:
+	if ({FREEZE::freezed::%uuid of player%} is true):
+		cancel event
+
+on damage:
+	if ({FREEZE::freezed::%uuid of victim%} is true):
+		cancel event
+
+		if (attacker is player):
+			send actionbar "&6%getDisplayName(victim)%&f is &6frozen &fand cannot be damaged" to attacker
+
+function handle_freeze_chat(player: player, message: string):
+	send formatted "&dStaff&8> &c[Frozen] %getDisplayName({_player})%&7:&f %raw {_message}%" to console and all players where [input has permission "cwsb.freeze.spy"]
+	log({_player}, "gesagt zum clan &c[Bildschirmübertragung gesperrt]&e:&e %raw {_message}%")
+
+on tab complete of "/freeze":
+	set tab completions to all players where [{FREEZE::freezed::%uuid of input%} is not true]
+on tab complete of "/unfreeze":
+	set tab completions to all players where [{FREEZE::freezed::%uuid of input%} is true]
+on command:
+	the command is not "sk" or "skript" or "unfreeze" or "freeze"
+	if ({FREEZE::freezed::%uuid of player%} is true):
+		send actionbar "&fYou cannot &6run commands&f while &b❄ Frozen ❄" to player
+		send formatted "&dStaff&8> &c[Frozen] %getDisplayName(player)%&f proceed command&6 /%raw full command%&f." to console and all players where [input has permission "cwsb.freeze.spy"]
+		cancel event
+		log({_player}, "proceed command &c[Bildschirmübertragung gesperrt]&e:&e %raw {_message}%")
+
+command /freeze [<text>]:
+	prefix: sbstaff
+	permission: cwsb.staff.screenshare
+	permission message: &2Server&8> &fNo Permission.
+	trigger:
+		if (arg-1 parsed as offline player has not played before):
+			send "&2Server&8> &fNo Player with this name found!"
+			stop
+		if (player(arg-1) is not set):
+			send "&2Server&8> %getDisplayName(arg-1 parsed as offline player)%&f is offline."
+			stop
+		set {_target} to arg-1 parsed as player
+		if ({FREEZE::freezed::%uuid of {_target}%} is true):
+			send "&dStaff&8> %getDisplayName({_target})%&f is frozen. <cmd:/unfreeze %{_target}'s name%>&c[Remove]<reset>"
+			stop
+		set {FREEZE::freezed::%uuid of {_target}%} to true
+		send formatted "&dStaff&8> %getDisplayName({_target})%&f was frozen by &6%getDisplayName(player)%&f." to console and all players where [input has permission "cwsb.freeze.modif_alerts"]
+		send formatted "&dStaff&8> &fYou have frozen this player. They have &65 minutes &fto join the &9/discord&f before you are required to ban them.%nl%&f Remove players' freeze:&6 /unfreeze %{_target}'s name%&f."
+		
+		send "&8%nl%&8 | &b[YOU HAVE BEEN FROZEN!]%nl%&8 | &fIf you log out, you will be &c&lbanned&f.%nl%&8 | &fYou have &65 minutes &fto join our &9/discord%nl%&8 | &fbefore you are banned.%nl%&8 | &f%nl%&8 | &7&o(( You have likely been frozen for an%nl%&8| &7&oinvestigation, usually regarding cheats. ))" to {_target}
+
+		log({_target}, "player frozen:5min by %uncoloured getDisplayName(player)%&e.")
+
+command /unfreeze [<text>]:
+	prefix: sbstaff
+	permission: cwsb.staff.screenshare
+	permission message: &2Server&8> &fNo Permission.
+	trigger:
+		if (arg-1 parsed as offline player has not played before):
+			send "&2Server&8> &fNo Player with this name found!"
+			stop
+		if (player(arg-1) is not set):
+			send "&2Server&8> %getDisplayName(arg-1 parsed as offline player)%&f is offline."
+			stop
+		set {_target} to arg-1 parsed as player
+		if ({FREEZE::freezed::%uuid of {_target}%} is not true):
+			send "&dStaff&8> %getDisplayName({_target})%&f is not frozen. <cmd:/freeze %{_target}'s name%>&2[Freeze]<reset>"
+			stop
+		delete {FREEZE::freezed::%uuid of {_target}%}
+		send formatted "&dStaff&8> %getDisplayName({_target})%&f was unfrozen by &6%getDisplayName(player)%&f." to console and all players where [input has permission "cwsb.freeze.modif_alerts"]
+		send formatted "&dStaff&8> &fYou have unfrozen this player"
+		
+		send "&2Server&8> &fYou are no longer frozen!" to {_target}
+
+		log({_target}, "player unfrozen by %uncoloured getDisplayName(player)%&e.")
