@@ -1,0 +1,48 @@
+on tab complete of "/banlist" or "/listbans" or "/banned" or "/blist":
+	set tab completions to "-r", "-dur", "-ip", "-ct", "-moder", "<page>"
+
+command /banlist [<text>]:
+	prefix: sbstaff
+	permission: cwsb.staff.banlist
+	permission message: &2Server&8> &fNo Permission.
+	aliases: listbans, banned, blist
+	trigger:
+		set {_flags::*} to (arg-1 split by " ")
+		set {_page} to ((first element of ({_flags::*} where [input parsed as number is set])) parsed as number) ? 1
+
+		send actionbar "&7&oCaching..."
+		async run (0 ticks) later:
+			clear {_lines::*}
+			set {_banned::*} to offline players where [isBanned(input) is true]
+			set {_maxpage} to floor(size of {_banned::*} / 7)
+			set {_page} to max(0, min({_page} - 1, {_maxpage}))
+
+			add "&eGesperrte Zocker (%{_page}+1%/%{_maxpage}+1%):" to {_lines::*}
+			loop (7 times):
+				set {_selection} to ({_page} * 7) + loop-counter-2
+
+				if ({_banned::%{_selection}%} is not set):
+					stop this loop
+				set {_line} to "&7 ● %({_banned::%{_selection}%})'s name%"
+				set {_puns::*} to getActivePunishments({_banned::%{_selection}%}) where [{PUNISH::data::%input%::type} is "BAN"]
+				sort {_puns::*} in descending order by ({PUNISH::data::%input%::duration})
+				set {_id} to (first element of ({_puns::*}))
+				if ({_flags::*} contains "-r"):
+					set {_line} to "%{_line}% &eweil '%{PUNISH::data::%{_id}%::reason}%'"
+				if ({_flags::*} contains "-dur"):
+					set {_line} to "%{_line}% &efür %rtimespan(now, {PUNISH::data::%{_id}%::duration} after {PUNISH::data::%{_id}%::date})%"
+				if ({_flags::*} contains "-ip"):
+					if (size of {_puns::*} where [{PUNISH::data::%input%::ip} is true] > 0):
+						set {_line} to "%{_line}%&e. Geltungsbereich erweitert IP"
+					else:
+						set {_line} to "%{_line}%&e. Geltungsbereich erweitert playerID"
+				if ({_flags::*} contains "-moder"):
+					set {_line} to "%{_line}%&e ausgestellt %uncoloured getDisplayName({PUNISH::data::%{_id}%::executor} parsed as offline player)%"
+				if (size of {_flags::*} where [input is not "-ct"] > 0):
+					set {_line} to "%{_line}%&e."
+				if ({_flags::*} contains "-ct"):
+					set {_line} to "%{_line}%&7 (%size of {_puns::*}% aktiv)"
+				add "%{_line}% <cmd:/moderate %{_banned::%{_selection}%}%>&f[&9Moderate&f]<reset>" to {_lines::*}
+
+			run (0 ticks) later:
+				send formatted (join {_lines::*} with (newline))
