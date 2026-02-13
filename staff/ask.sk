@@ -1,0 +1,199 @@
+local function l_wrap(string: string, colour: string) :: strings:
+	clear {_lines::*}
+	set {_currentLine} to ""
+
+	loop ({_string} split by " "):
+		if (length of {_currentLine} is 0):
+			set {_currentLine} to "%{_colour}%%loop-value%"
+		else if (length of {_currentLine} + 1 + length of loop-value <= 35):
+			set {_currentline} to (join "%{_colour}%%{_currentline}%", loop-value with " ")
+		else:
+			add "%{_colour}%%{_currentLine}%" to {_lines::*}
+			set {_currentLine} to "%{_colour}%%loop-value%"
+
+	return {_lines::*}, {_currentLine}
+
+local function getAskGlyph(id: string) :: item:
+	set {_item} to iron sword named getDisplayName({ASK::data::%{_id}%::from} parsed as offline player) with lore "&fLanguage:&6 EN", "&fServer:&6 factions-node-1", "&fTime:&6 %rtimespan(now, {ASK::data::%{_id}%::date})%", "&7", l_wrap({ASK::data::%{_id}%::reason}, "&f"), "&f", "&eRMB &7- Transfer to DE"
+	set string tag "cwsb;ask;id" of custom nbt of {_item} to {_id}
+	set byte tag "cwsb;item_util;rclick_send_item" of custom nbt of {_item} to 1
+
+	return {_item}
+
+function reportQuestion(player: offlineplayer, reason: string):
+	set {_id} to "%random number between 100000 and 999999%"
+
+	set {ASK::data::%{_id}%::from} to uuid of {_player}
+	set {ASK::data::%{_id}%::reason} to {_reason}
+	set {ASK::data::%{_id}%::date} to now
+
+	add {_id} to {ASK::ids::*} 
+
+	send "&2Question&8> &fYour question has been sent to the moderation team. Please wait." to {_player}
+	send formatted "&2Question&8> %getDisplayName({_player})%&f has sent a question from &6factions-node-1&f. Read it &l-&6 /questions&f." to all players where [input has permission "cwsb.asks.view_alerts"]
+
+on quit:
+	clear {ASK::metadata::%uuid of player%::*} 
+
+function loadQuestionsUI(player: player, page: number):
+	set {ASK::metadata::%uuid of {_player}%::page} to {_page}
+
+	set {_maxpage} to ceil(size of {ASK::ids::*} / 45) - 1 
+	set {_page} to min(max(0, {_page}), {_maxpage})
+
+	open chest inventory with 6 rows named "&4Questions" to {_player}
+	
+	set {_selection} to {_page} * 45
+
+	set {_indexes::*} to indexes of {ASK::ids::*}
+	sort {_indexes::*} in ascending order
+
+	loop (45) times:
+		if ({_selection}+1 > size of {_indexes::*}):
+			stop this loop
+		add 1 to {_selection}
+		set {_tbuf} to 0
+
+		set {_index} to {_indexes::%{_selection}%}
+
+		if ({ASK::ids::%{_index}%} is set):
+			set slot (loop-counter - 1) of {_player}'s current inventory to getAskGlyph({ASK::ids::%{_index}%})
+
+	if ({_page} < {_maxpage}):
+		set slot 53 of {_player}'s current inventory to arrow named "&aNext Page" with lore "&7There are more questions. You can", "&7view them at page %{_page}+2%."
+	if ({_page} > 0):
+		set slot 45 of {_player}'s current inventory to arrow named "&aPrevious Page" with lore "&7There are more questions. You can", "&7view them at page %{_page}%."
+     
+
+on inventory click:
+	name of event-inventory is "&4Questions"
+	event-inventory is player's current inventory
+	cancel event
+
+	if (event-item is arrow):
+		clicked slot is 53:
+			loadQuestionsUI(player, {REPORT::metadata::%uuid of player%::page}+1)
+		clicked slot is 45:
+			loadQuestionsUI(player, {REPORT::metadata::%uuid of player%::page}-1)
+
+	if (custom nbt of event-item has tag "cwsb;ask;id"):
+		loadAskManager(player, string tag "cwsb;ask;id" of custom nbt of event-item)
+
+
+function loadAskManager(player: player, id: string):
+	set {ASK::metadata::%uuid of {_player}%::id} to {_id}
+
+	open chest inventory with 3 rows named "&4Question" to {_player}
+
+	set slot 11 of {_player}'s current inventory to paper named "&aAnswer Question" with lore "&f", "&7Click to reply to", "&7this question."
+
+	set slot 13 of {_player}'s current inventory to getAskGlyph({_id})
+
+	set slot 15 of {_player}'s current inventory to black banner named "&aQuick Reply" with lore "&7Click to reply with a", "&7premade answer."
+
+
+on chat with priority lowest:
+	if ({CHAT::enter::%uuid of player%} is "QUESTION_ANSWER"):
+		answerQuestion(player, {ASK::metadata::%uuid of player%::id}, message)
+		async run (0 ticks) later:
+			delete {CHAT::enter::%uuid of player%}
+function answerQuestion(player: player, id: string, answer: string, anon: boolean = false):
+	send formatted "&2Question&8> &fYou answered the question.", "&fQuestion/Report:&6 %{ASK::data::%{_id}%::reason}%&f (&6factions-node-1&f/&6EN&f)", "&fYour response:&6 %{_answer}%" to {_player}
+	send formatted "&2Question&8> %getDisplayName({_player})%&f has answered question &7'&6%getDisplayName({ASK::data::%{_id}%::from} parsed as offline player)%&f &fasked &7%{ASK::data::%{_id}%::reason}%&7'&f with reply &7'%{_answer}%&7'&f." to console and all players where [input has permission "cwsb.asks.view_answer_alerts"]
+
+	if ({_anon} is true):
+		set {_replier} to "Moderator"
+	else:
+		set {_replier} to getDisplayName({_player})
+	mail_send_system({ASK::data::%{_id}%::from} parsed as offline player, "&fYour report&f:\n$bar&7> %{ASK::data::%{_id}%::reason}%%nl%$bar&6%{_replier}%'s&f Response:\n$bar&7> &fHello &6%getDisplayName({ASK::data::%{_id}%::from} parsed as offline player)%&f, &f%{_answer}%&6, have a nice day!")
+
+	remove {_id} from {ASK::ids::*}
+	clear {ASK::data::%{_id}%::*}
+
+on inventory click:
+	name of event-inventory is "&4Question"
+	event-inventory is player's current inventory
+	cancel event
+
+	set {_id} to {ASK::metadata::%uuid of player%::id}
+
+	clicked slot is 11:
+		send formatted "&2Question&8> &fPlease enter your reply to the report in chat."
+		set {CHAT::enter::%uuid of player%} to "QUESTION_ANSWER"
+		close player's inventory
+	clicked slot is 15:
+		if (player does not have permission "cwsb.asks.quick_replies"):
+			send "&2Server&8> &fNo permission."
+			stop
+		loadQuickReplies(player)
+
+function loadQuickReplies(player: player):
+	set {_id} to {ASK::metadata::%uuid of {_player}%::id}
+
+	open chest inventory with 5 rows named "&4Quick Replies" to {_player}
+
+	set slot 11 of {_player}'s current inventory to paper named "&aAnswer Question Manually" with lore "&f", "&7Click to reply to", "&7this question."
+
+	set slot 13 of {_player}'s current inventory to getAskGlyph({_id})
+
+	set slot 15 of {_player}'s current inventory to red banner named "&aPunish Sender" with lore "&7", "&7Click to punish the sender,", "&7usually for rules 3.9.1", "&7and 3.9.2"
+
+	loop ("we are not sure what you wish to report. Please provide more information about the issue, thanks in advance", "please only contact us for important matters or you might be punished", "please contact us in our Discord Server", "please do not flood us with issues or you might get punished", "the issue is currently being worked on by our dev team, thanks for reporting", "ban appeals can be placed on our discord - /discord", "insults/spam in personal messaging aren't punishable offenses. Use /ignore add [nickname]", "use /report to file complaints", "plugin info is kept confidential. Most of the server uses custom plugins", "we do not reveal who issued punishments", "your question has violated rules, you have been issued a punishment", "auction-house transactions are automatic and cannot be rolled back by staff", "players with Sergeant can pick 2 out of 4 random items from their /dailydrop after ranking up once every day", "you can view rank bonuses on the /store", "we cannot give you free items. View giveaways - /discord", "if you wish for an inventory rollback, join the /discord", "Every 3 days, factions lose 1 DTR. Factions below 3 members will automatically become raidable", "you can create a faction for $10.000 with /f create", "we cannot help you with this issue. Contact administration - /discord", "we calculate DTR with this formula, max[round(MEMBER CT / 1.5), 1]", "if your clan has broke the rules, admins have the right to delete it", "for help with purchaseable assistance ranks, go to bit.ly/clanwarshelpers"):
+		set {_item} to filled map named "&aSend player quick reply" with lore "&7Click to quick reply", "&7to player.", "&f", "&fHello &6%getDisplayName({ASK::data::%{_id}%::from} parsed as offline player)%&f,", l_wrap("%loop-value%&6, &6have &6a &6nice &6day!", "&f")
+		set string tag "cwsb;quickreply;message" of custom nbt of {_item} to loop-value
+		set slot (17 + loop-counter) of {_player}'s current inventory to {_item}
+
+on inventory click:
+	name of event-inventory is "&4Quick Replies"
+	event-inventory is player's current inventory
+	cancel event
+
+	set {_id} to {ASK::metadata::%uuid of player%::id}
+
+	clicked slot is 11:
+		send formatted "&2Question&8> &fPlease enter your reply to the report in chat."
+		set {CHAT::enter::%uuid of player%} to "QUESTION_ANSWER"
+		close player's inventory
+
+	clicked slot is 15:
+		openPunishSelector(player, {ASK::data::%{_id}%::from} parsed as offline player)
+		answerQuestion(player, {_id}, "your question has violated rules, you'll soon be issued a punishment", true)
+
+	if (custom nbt of event-item has tag "cwsb;quickreply;message"):
+		answerQuestion(player, {_id}, string tag "cwsb;quickreply;message" of custom nbt of event-item)
+		close player's inventory
+			
+
+command /q [<text>]:
+	prefix: sbreports
+	aliases: questions, asks
+	permission: cwsb.asks.menu
+	permission message: &2Question&8> &fPurchase &2Seneschall&f to view player questions / helpops.
+	trigger:
+		loadQuestionsUI(player, 0)
+
+discord command +q [<text>]:
+	trigger:
+		destroy event-message
+		if (offlinePlayerHasPermission(getLinkedAccount(discord id of event-member), "cwsb.asks.menu") is not true):
+			reply with ":x: %mention tag of event-member%, Your linked account cannot use `/asks`. Or you are not linked."
+			stop
+
+		reply with ":thinking: There are **`%size of {ASK::ids::*}%`** unanswered questions, %mention tag of event-member%."
+
+command /ask [<text>]:
+	prefix: sbreports
+	cooldown: 1 minute
+	cooldown message: &2Question&8> &fCommand on cooldown for &6%timespan(remaining time)%&f.
+	cooldown bypass: cwsb.asks.bypass_cooldown
+	trigger:
+		if (arg-1 is not set):
+			send "&2Question&8> &fCommand Help%nl%&7- &6/ask [Reason] &f- Makes question for reason.%nl%&cWe punish players &ffor false / troll questions."
+			cancel cooldown
+			stop
+
+		reportQuestion(player, arg-1)
+
+every 30 minutes:
+	if (size of ({ASK::ids::*} where [{ASK::data::%input%::from} is set]) > 0):
+		send formatted "&2Question&8> &fThere are &6%size of {ASK::ids::*} where [{ASK::data::%input%::from} is set]%&f unanswered questions. <cmd:/q>&6[Click Here]<reset>" to console and all players where [input has permission "cwsb.asks.10m_alert"]
