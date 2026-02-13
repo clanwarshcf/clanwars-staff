@@ -1,3 +1,5 @@
+# basic alt caching
+
 on join:
 	if ({PUNISH::ips::%uuid of player%::*} does not contain ip of player): # PUNISH stored in special database cause yes
 		loop ({PUNISH::uuids::%ip of player%::*} ? uuid of player):
