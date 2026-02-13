@@ -1,0 +1,77 @@
+import:
+	com.viaversion.viaversion.api.Via
+	com.viaversion.viaversion.api.protocol.version.ProtocolVersion
+
+	org.bukkit.Statistic
+
+on tab complete of "/playerinfo":
+	set tab completions for position 1 to all players
+
+command /playerinfo [<text>]:
+	prefix: sbstaff
+	permission: cwsb.staff.playerinfo
+	permission message: &2Server&8> &fNo Permission.
+	trigger:
+		async run (0 ticks) later:
+			if (arg-1 parsed as offline player has not played before):
+				send "&2Playerinfo&8> &fPlayer not found!"
+				stop
+
+			set {_playtime} to timespan("%(arg-1 parsed as offline player).getStatistic(Statistic.PLAY_ONE_MINUTE)% ticks" parsed as timespan)
+
+			if (offlinePlayerHasPermission(arg-1 parsed as offline player, "cwsb.staff.copnfidential") is true):
+				set {_ipline} to "&b● &7IP Address is &lredacted&7."
+			else:
+				set {_ipline} to "&b● &7IPV4: %{IPCACHE::ip::%uuid of (arg-1 parsed as offline player)%} ? "NOT CACHED"%"
+	
+			send formatted join ("&a &d", "&eSpieler-Infos:", "&f● &7Nickname: %getDisplayName(arg-1 parsed as offline player)%", "&f● &7Kennug: %{IDS::id::%uuid of (arg-1 parsed as offline player)%}%", "&f● &7Clan: %{CLAN::data::%getClan(arg-1 parsed as offline player)%::name} ? null%&8@%getClan(arg-1 parsed as offline player) ? -1%", "&a● &7Last Login: %rtimespan(now, (last login of (arg-1 parsed as offline player)))% ago", "&a● &7First login time: %rtimespan(now, (first login of (arg-1 parsed as offline player)))% ago", "&a● &7Time in game: %{_playtime}%", "&b● &7Version: %{IPCACHE::protocol::%uuid of (arg-1 parsed as offline player)%} ? "NOT CACHED"%", "&b● &7Last Server: factions-node-1", {_ipline}) with (newline)
+
+			if (size of getActivePunishments(arg-1 parsed as offline player) <= 0):
+				send "&c● &7Punishments: -", "&f &f"
+			else:
+				send "&c● &7Punishments (%size of getActivePunishments(arg-1 parsed as offline player)%): "
+				loop (getActivePunishments(arg-1 parsed as offline player)):
+					set {_type} to "IP" if ({PUNISH::data::%loop-value%::ip} is true) else "playerid"
+
+					send formatted join ("&c● &7Type: %{PUNISH::data::%loop-value%::type}%&7 - %{_type}% &8(by playerid\IP)", "&c● &7Issued by: %getDisplayName({PUNISH::data::%loop-value%::executor} parsed as offline player)%", "&c● &7Reason: %{PUNISH::data::%loop-value%::reason}%", "&c● &7Punished: %rtimespan(now, {PUNISH::data::%loop-value%::date})%", "&c● &7Time left: %rtimespan(now, {PUNISH::data::%loop-value%::duration} after {PUNISH::data::%loop-value%::date})%", "&c● &7Punished for: %timespan({PUNISH::data::%loop-value%::duration})%") with (newline)
+				send "&f &f"
+
+discord command +playerinfo [<text>] [<text>]:
+	aliases: +pi
+	trigger:
+		destroy event-message
+		async run (0 ticks) later:
+			if (offlinePlayerHasPermission(getLinkedAccount(discord id of event-member), "cwsb.staff.playerinfo") is not true):
+				reply with ":x: Your linked account cannot use `/playerinfo`. Or you are not linked."
+				stop
+			if (arg-1 parsed as offline player has not played before):
+				reply with ":x: Player not found!"
+				stop
+
+			set {_playtime} to timespan("%(arg-1 parsed as offline player).getStatistic(Statistic.PLAY_ONE_MINUTE)% ticks" parsed as timespan)
+
+			open private channel of event-member and store it in {_channel}
+			if ({_channel} is not set):
+				reply with "An error occurred. You have your private DMs closed to the bot. Please enable them, then retry this command!"
+				stop
+
+			if (offlinePlayerHasPermission(arg-1 parsed as offline player, "cwsb.staff.copnfidential") is true):
+				set {_ipline} to " ● IP Address is **redacted**."
+			else:
+				set {_ipline} to " ● IPV4: %{IPCACHE::ip::%uuid of (arg-1 parsed as offline player)%} ? "NOT CACHED"%"
+
+			post (join "Spieler-Infos:", " ● Nickname: %getDisplayName(arg-1 parsed as offline player)%", " ● Identifier: %{IDS::id::%uuid of (arg-1 parsed as offline player)%}%", " ● Clan: %{CLAN::data::%getClan(arg-1 parsed as offline player)%::name} ? null%`#%getClan(arg-1 parsed as offline player) ? -1%`", " ● Last Login: %rtimespan(now, (last login of (arg-1 parsed as offline player)))%", " ● First login time: %rtimespan(now, (first login of (arg-1 parsed as offline player)))%", " ● Time in game: %{_playtime}%", {_ipline}, " ● Version: %{IPCACHE::protocol::%uuid of (arg-1 parsed as offline player)%} ? "NOT CACHED"%", " ● Last Server: factions-node-1", "&f" with newline) to {_channel}
+
+			if (size of getActivePunishments(arg-1 parsed as offline player) <= 0):
+				post (join " ● **No active punishments!**", " " with (newline)) to {_channel}
+			else:
+				loop (getActivePunishments(arg-1 parsed as offline player)):
+					set {_type} to "IP" if ({PUNISH::data::%loop-value%::ip} is true) else "playerid"
+
+					post (join " ● **Punishment:**", " ● Type: %{PUNISH::data::%loop-value%::type}%&f - %{_type}% &8(by playerid\IP)", " ● Issued by: %getDisplayName({PUNISH::data::%loop-value%::executor} parsed as offline player)%", " ● Reason: %{PUNISH::data::%loop-value%::reason}%", " ● Punished: %rtimespan(now, {PUNISH::data::%loop-value%::date})%", " ● Time left: %rtimespan(now, {PUNISH::data::%loop-value%::duration} after {PUNISH::data::%loop-value%::date})%", " ● Punished for: %timespan({PUNISH::data::%loop-value%::duration})%", " " with (newline)) to {_channel}
+
+			reply with ":smirk: Confidential information. Check your DMs."
+
+on join:
+	set {IPCACHE::ip::%uuid of player%} to ip of player
+	set {IPCACHE::protocol::%uuid of player%} to ProtocolVersion.getProtocol(Via.getAPI().getPlayerVersion(player)).getName()
