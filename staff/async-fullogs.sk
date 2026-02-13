@@ -1,0 +1,98 @@
+on tab complete of "/fullogs":
+	set tab completions for position 1 to (all players)
+
+command /fullogs [<text>] [<text>]:
+	prefix: sbstaff
+	permission: cwsb.staff.fullogs
+	permission message: &2Server&8> &fNo Permission.
+	trigger:
+		if (isMemberLinked(player) is not true):
+			send "&2Logs&8> &fTo use this command, you must be &6linked&f.%nl%&f Link Account:&6 /link&f."
+			stop
+		
+		if (arg-1 parsed as offline player has not played before):
+			send "&2Logs&8> &fNo player found!"
+			stop
+		if (arg-1 parsed as offline player has permission "cwsb.staff.confidential"):
+			send "&2Server&8> &fThis information is confidential."
+			stop
+		set {_target} to arg-1 parsed as offline player
+
+		open private channel of (member with id (getLinkedId(player)) in guild with id "1455359623476416656") and store it in {_channel}
+		if ({_channel} is not set):
+			send "&2Server&8> &fAn error occurred whilst opening a private DM with your discord linked account.%nl% &fPlease &6open your dms&f with the discord bot."
+			stop
+		
+		send "&2Logs&8>&f Caching logs.. this may take a bit.."
+		async run (0 ticks) later:
+			add "Events by player '%{_target}'s name%':" to {_lines::*}
+			if (size of {LOGS::entries::%uuid of {_target}%::*} > 0):
+				loop ({LOGS::entries::%uuid of {_target}%::*}):
+					set {_prettydate} to {LOGS::data::%loop-value%::date} formatted as "dd.MM HH:mm:ss"
+					set {_template} to "`[factions-node-1][%{_prettydate}%] %{LOGS::data::%loop-value%::body}%`"
+					if (size of ({_template} split by (newline)) > 1):
+						set {_template} to "``%{_template}%``" # wraps multiline logs in big code block ykyk
+					add uncoloured {_template} to {_lines::*}
+			else:
+				add "", "", "", "", "```Es konnten keine Protokolle gefunden werden!", "Versuchen, deine Suchbegriffe zu ändern?```", "", "", "", "" to {_lines::*}
+
+			clear {_messages::*}
+			delete {_message}
+			loop ({_lines::*}):
+				if (length of {_message}+length of loop-value >= 2000):
+					add {_message} to {_messages::*}
+					set {_message} to loop-value-2
+				else:
+					set {_message} to join {_message}, loop-value with (newline)
+			run (0 ticks) later:
+				loop ({_messages::*}):
+					post loop-value to {_channel}
+				send "&2Logs&8> &fFinished exporting player's fullogs!"
+
+discord command +fullogs [<text>] [<text>]:
+	trigger:
+		destroy event-message
+		if (offlinePlayerHasPermission(getLinkedAccount(discord id of event-member), "cwsb.staff.fullogs") is not true):
+			reply with ":x: %mention tag of event-member%, Your linked account cannot use `/fullogs`. Or you are not linked."
+			stop
+		if (arg-1 parsed as offline player has not played before):
+			reply with ":x: %mention tag of event-member%, No player with this name played before."
+			stop
+		if (offlinePlayerHasPermission(arg-1 parsed as offline player, "cwsb.staff.confidential") is true):
+			reply with ":see_no_evil: %mention tag of event-member%, Information about this player is confidential."
+			stop
+		set {_target} to arg-1 parsed as offline player
+
+		open private channel of event-member and store it in {_channel}
+		if ({_channel} is not set):
+			reply with "An error occurred. You have your private DMs closed to the bot. Please enable them, then retry this command!"
+			stop
+		reply with ":smirk: Confidential information. Check your DMs."
+
+		post "`Caching logs.. this may take a bit.. Active players' fullogs may take >1 hour to export.`" to {_channel}
+		async run (0 ticks) later:
+			add "Events by player '%{_target}'s name%':" to {_lines::*}
+
+			set {_logs::*} to {LOGS::entries::%uuid of {_target}%::*}
+			if ({_logs::*} > 0):
+				loop ({_logs::*}):
+					set {_prettydate} to {LOGS::data::%loop-value%::date} formatted as "dd.MM HH:mm:ss"
+					set {_template} to "`[factions-node-1][%{_prettydate}%] %{LOGS::data::%loop-value%::body}%`"
+					if (size of ({_template} split by (newline)) > 1):
+						set {_template} to "``%{_template}%``" # wraps multiline logs in big code block ykyk
+					add uncoloured {_template} to {_lines::*}
+			else:
+				add "", "", "", "", "```Es konnten keine Protokolle gefunden werden!", "Versuchen, deine Suchbegriffe zu ändern?```", "", "", "", "" to {_lines::*}
+
+			clear {_messages::*}
+			delete {_message}
+			loop ({_lines::*}):
+				if (length of {_message}+length of loop-value >= 2000):
+					add {_message} to {_messages::*}
+					set {_message} to loop-value-2
+				else:
+					set {_message} to join {_message}, loop-value with (newline)
+			run (0 ticks) later:
+				loop ({_messages::*}):
+					post loop-value to {_channel}
+				post ":white_check_mark: Finished exporting fullogs!" to {_channel}
