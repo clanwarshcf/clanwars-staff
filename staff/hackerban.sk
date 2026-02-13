@@ -1,0 +1,123 @@
+discord command +addhackerban [<text>] [<text>]:
+	trigger:
+		if (discord id of event-channel is not "1455611156692467896"):
+			reply with ":x: You may only add hackerbans in <#1455611156692467896>." and store it in {_msg}
+			wait 5 seconds
+			destroy {_msg}
+			destroy event-message
+		if (offlinePlayerHasPermission(getLinkedAccount(discord id of event-member), "cwsb.hackerban.add") is not true):
+			reply with "We could not find you in the database. Your account either: Is not linked, or does not have proper perms."
+			stop
+
+		if ((arg-1 parsed as offline player) has not played before):
+			reply with ":x: No player with this name found." and store it in {_msg}
+			wait 10 seconds
+			destroy {_msg}
+			destroy event-message
+			stop
+
+		if all:
+			size of (attachments of event-message) <= 0
+			arg-2 does not start with "https://"
+			arg-2 does not start with "http://"
+		then:
+			reply with ":x: Provide attachments (Videos preferrably) for proof. Or use a `https://...` or `http://...` URL" and store it in {_msg}
+			wait 10 seconds
+			destroy {_msg}
+			destroy event-message
+			stop
+			
+
+		if (size of ({PUNISH::hackerbanqueue::*} where [{PUNISH::hackerban::%input%::uuid} is uuid of (arg-1 parsed as offline player)]) > 0):
+			reply with ":x: `%uncoloured getDisplayName(arg-1 parsed as offline player)%` is already in the hackerban review queue." and store it in {_msg}
+			wait 10 seconds
+			destroy {_msg}
+			destroy event-message
+			stop
+		
+		set {_id} to "%round(random number between 100000 and 999999)%"
+
+		if (size of (attachments of event-message where [attachment input is not a video]) > 0):
+			reply with ":x: You must provide videos for hackerban submissions." and store it in {_msg}
+			wait 10 seconds
+			destroy {_msg}
+			stop
+		clear {_urls::*}
+		loop (attachments of event-message):
+			add the attachment url of loop-value to {_urls::*}
+		if any:
+			arg-2 starts with "https://"
+			arg-2 starts with "http://"
+		then:
+			add (arg-2) to {_urls::*}
+		set {PUNISH::hackerban::%{_id}%::uuid} to uuid of (arg-1 parsed as offline player)
+		set {PUNISH::hackerban::%{_id}%::executor} to uuid of getLinkedAccount(discord id of event-member)
+
+		set {PUNISH::hackerban::%{_id}%::date} to now
+		set {PUNISH::hackerban::%{_id}%::urls::*} to {_urls::*}
+		
+		add {_id} to {PUNISH::hackerbanqueue::*}
+		reply with ":white_check_mark: Added `%uncoloured getDisplayName(arg-1 parsed as offline player)%` to the hackerban queue"
+
+discord command +gethacker [<text>]:
+	trigger:
+		if (discord id of event-channel is not "1455611168508084350"):
+			reply with ":x: You may only get hackerbans in <#1455611168508084350>." and store it in {_msg}
+			wait 5 seconds
+			destroy {_msg}
+			destroy event-message
+		if (offlinePlayerHasPermission(getLinkedAccount(discord id of event-member), "cwsb.hackerban.get") is not true):
+			reply with "You must be `Moder+` ingame or higher. Are you not linked?"
+			stop
+
+		if (arg-1 is "-n"):
+			reply with ":tada: There are **%size of {PUNISH::hackerbanqueue::*}%** pending reviews!"
+		else if (arg-1 is not set):
+			if (size of {PUNISH::hackerbanqueue::*} <= 0):
+				reply with ":x: There are no hackerbans pending review."
+				stop
+
+			set {_id} to first element of {PUNISH::hackerbanqueue::*}
+			create a new message and store it in {_msg}:
+				set content of the message to "%uncoloured getDisplayName({PUNISH::hackerban::%{_id}%::uuid} parsed as offline player)% Hack Ban%nl%**Proof URL:** %join {PUNISH::hackerban::%{_id}%::urls::*} with ", "%%nl%%nl%Click one of the buttons to determine the result of this hackerban.%nl%-# HackerBan submitted by `%uncoloured getDisplayName({PUNISH::hackerban::%{_id}%::executor} parsed as offline player)%` about <t:%floor(unix timestamp of {PUNISH::hackerban::%{_id}%::date})%:R>."
+				create new component row and store it in {_row}:
+					add new primary button with id "cwsb.hackerban.accept;%{_id}%" named "Accept Evidence" to components of the row
+					add new danger button with id "cwsb.hackerban.deny;%{_id}%" named "Deny Evidence" to components of the row
+				add {_row} to component rows of the message
+			reply with {_msg}
+		else: 
+			reply with "**Punishment**> Hackerban help:%nl%`- +gethacker -n` - Gets count of remaining reviews%nl%`- +gethacker -b` - Gets count of remaining bans%nl%`- +gethacker` - Gets the next hackerban for review."
+
+on button click:
+	if (event-string starts with "cwsb.hackerban.accept;"):
+		if (offlinePlayerHasPermission(getLinkedAccount(discord id of event-member), "cwsb.hackerban.get") is not true):
+			reply with hidden "You must be `Moder+` ingame or higher. Are you not linked?"
+			stop
+		set {_id} to (event-string).replace("cwsb.hackerban.accept;", "")
+
+		if ({PUNISH::hackerbanqueue::*} does not contain {_id}):
+			reply with hidden ":x: This hackerban has already been replied to!"
+			stop
+		reply with "  %mention tag of event-member% `(%uncoloured getDisplayName(getLinkedAccount(discord id of event-member))%)` has accepted the report, here are the commands:%nl%```/ban %({PUNISH::hackerban::%{_id}%::uuid} parsed as offline player)'s name% 30d Rule 3.1 - Cheating @%nl%/ipban %({PUNISH::hackerban::%{_id}%::uuid} parsed as offline player)'s name% 30d Rule 3.1 - Cheating @%nl%%nl%DISCORD VERSION:%nl%+ban %({PUNISH::hackerban::%{_id}%::uuid} parsed as offline player)'s name% 30d Spielmodifikationen verboten (nicht anfechtbar) @%nl%+ipban %({PUNISH::hackerban::%{_id}%::uuid} parsed as offline player)'s name% 30d Spielmodifikationen verboten (nicht anfechtbar) @```"		
+
+		remove {_id} from {PUNISH::hackerbanqueue::*}
+		clear {PUNISH::hackerban::%{_id}%::*}
+
+		edit button to show new disabled success button with id (event-string) named "Accepted by %uncoloured getDisplayName(getLinkedAccount(discord id of event-member))%"
+
+on button click:
+	if (event-string starts with "cwsb.hackerban.deny;"):
+		if (offlinePlayerHasPermission(getLinkedAccount(discord id of event-member), "cwsb.hackerban.get") is not true):
+			reply with hidden "You must be `Moder+` ingame or higher. Are you not linked?"
+			stop
+		set {_id} to (event-string).replace("cwsb.hackerban.deny;", "")
+
+		if ({PUNISH::hackerbanqueue::*} does not contain {_id}):
+			reply with hidden ":x: This hackerban has already been replied to!"
+			stop
+		reply with "  %mention tag of event-member% `(%uncoloured getDisplayName(getLinkedAccount(discord id of event-member))%)` has denied the report."		
+
+		remove {_id} from {PUNISH::hackerbanqueue::*}
+		clear {PUNISH::hackerban::%{_id}%::*}
+
+		edit button to show new disabled danger button with id (event-string) named "Denied by %uncoloured getDisplayName(getLinkedAccount(discord id of event-member))%"
