@@ -1,0 +1,65 @@
+on join:
+	if ({PUNISH::ips::%uuid of player%::*} does not contain ip of player): # PUNISH stored in special database cause yes
+		loop ({PUNISH::uuids::%ip of player%::*} ? uuid of player):
+			{PUNISH::ips::%loop-value%::*} does not contain ip of player
+			add ip of player to {PUNISH::ips::%loop-value%::*}
+	if ({PUNISH::uuids::%uuid of player%::*} does not contain uuid of player):
+		loop ({PUNISH::ips::%uuid of player%::*} ? ip of player):
+			{PUNISH::uuids::%loop-value%::*} does not contain uuid of player
+			add uuid of player to {PUNISH::uuids::%loop-value%::*}
+
+function getAlts(player: offlineplayer) :: offlineplayers:
+	clear {_cache::*}
+	loop ({PUNISH::ips::%uuid of {_player}%::*}):
+		loop ({PUNISH::uuids::%loop-value%::*} where [{_cache::*} does not contain input]):
+			add loop-value-2 parsed as offline player to {_cache::*}
+	return {_cache::*}
+
+command /ip [<text>]:
+	prefix: sbstaff
+
+	aliases: multiaccount, alts, playerip
+	permission: cwsb.alts.command.main
+	permission message: &2Server&8> &fNo Permission.
+	trigger:
+		if (arg-1 parsed as offline player has not played before):
+			send "&eNo player with this name found!"
+			stop
+
+		if (offlinePlayerHasPermission(arg-1 parsed as offline player, "cwsb.staff.copnfidential") is true):
+			send "&2Server&8> &fInformation about this player is confidential."
+			stop
+
+		async run (0 ticks) later:
+			set {_lines::*} to "&eSpieler auf IP:"
+
+			loop (getAlts(arg-1 parsed as offline player)):
+				add "&7 %getDisplayName(loop-value)%&f [<tooltip:&9Click Here&f &l-&f View Playerinfo><cmd:/playerinfo %(loop-value)'s name%>&9PlayerInfo<reset>&f]" to {_lines::*}
+
+			run (0 ticks) later:
+				send formatted (join {_lines::*} with (newline))
+
+discord command +ip [<text>]:
+	aliases: +multiaccount, +alts, +playerip
+	trigger:
+		if (offlinePlayerHasPermission(getLinkedAccount(discord id of event-member), "cwsb.alts.command.main") is not true):
+			destroy event-message
+			reply with ":x: %mention tag of event-member%, you do not have permission to run `/ip` ingame and cannot use it here, or your account is not linked." and store it in {_msg}
+			wait 5 seconds
+			destroy {_msg}
+			stop
+
+		if (offlinePlayerHasPermission(arg-1 parsed as offline player, "cwsb.staff.confidential") is true):
+			reply with ":see_no_evil: Information about this player is confidential."
+			stop
+
+		reply with "Caching..." and store it in {_msg}
+		async run (0 ticks) later:
+			set {_lines::*} to "Accounts unter der IP des Spielers:", " ", "```"
+
+			loop (getAlts(arg-1 parsed as offline player)):
+				add (uncoloured getDisplayName(loop-value)) to {_lines::*}
+			add "```" to {_lines::*}
+			run (0 ticks) later:
+				reply with (join {_lines::*} with (newline))
+				destroy {_msg}
