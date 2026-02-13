@@ -1,0 +1,100 @@
+import:
+	com.google.gson.JsonObject
+	com.google.gson.JsonParser
+
+	java.io.BufferedReader
+	java.io.InputStreamReader
+	java.net.HttpURLConnection
+	java.net.URL
+
+	java.net.URI
+	java.net.http.HttpClient
+	java.net.http.HttpRequest
+	java.net.http.HttpResponse
+
+	java.lang.StringBuilder
+
+local function getResponse(ip: string) :: object:
+	set {_key} to getSecret("proxycheck.key")
+	set {_queryUrl} to raw "https://proxycheck.io/v3/%{_ip}%?key=%{_key}%"
+
+	set {_client} to HttpClient.newHttpClient()
+	set {_request} to HttpRequest.newBuilder().uri(URI.create({_queryUrl})).GET().build()
+
+	set {_response} to {_client}.send({_request}, HttpResponse.BodyHandlers.ofString())
+
+	return JsonParser.parseString({_response}.body()).getAsJsonObject()
+
+
+local function checkVPN(player: player, target: offline player):
+	set {_ip} to {IPCACHE::ip::%uuid of {_target}%}
+
+	if ({_ip} is not set):
+		send "&eNo IPCache found for '%{_target}'s name%'." to {_player}
+		stop
+
+	set {_root} to getResponse({_ip})
+
+	if any:
+		{_root} is null
+		{_root} is not set
+	then:
+		send "&eNo JSON Response (_root) found for '%{_target}'s name%:%{_ip}%'." to {_player}
+		stop
+
+	if any:
+		{_root}.has("status") is not true
+		{_root}.get("status").getAsString() is not "ok"
+	then:
+		send "&eJSON Response for '%{_target}'s name%:%{_ip}%' did not return status &aOK&e. Contact a developer!" to {_player}
+		send component minimessage from "<yellow>Full JSON response:&f <click:copy_to_clipboard:%{_root}%><light_gray>[Copy]<reset>" to {_player}
+		stop
+
+	if any:
+		{_root}.has({_ip}) is not true
+		{_root}.get({_ip}).isJsonObject() is not true
+	then:
+		send "&eJSON Response for '%{_target}'s name%:%{_ip}%' did not have field '%{_ip}%' and the walker could not fetch data." to {_player}
+		send component minimessage from "<yellow>Full JSON response:&f <click:copy_to_clipboard:%{_root}%><light_gray>[Copy]<reset>" to {_player}
+		stop
+
+	set {_ipObject} to {_root}.getAsJsonObject({_ip})
+
+	if ({_ipObject}.has("detections") is not true):
+		send "&eJson Response of for '%{_target}'s name%:%{_ip}%'/%{_ip}% does not have field 'detections' and the walker could not fetch data." to {_player}
+		send component minimessage from "<yellow>Full JSON response:&f <click:copy_to_clipboard:%{_root}%><light_gray>[Copy]<reset>" to {_player}
+		stop
+
+	set {_detections} to {_ipObject}.getAsJsonObject("detections")
+
+	set {_proxy} to {_detections}.get("proxy").getAsBoolean()
+	set {_tor} to {_detections}.get("tor").getAsBoolean()
+	set {_vpn} to {_detections}.get("vpn").getAsBoolean()
+	set {_confidence} to {_detections}.get("confidence").getAsInt()
+	set {_hosting} to {_detections}.get("hosting").getAsBoolean()
+
+	set {_mobile} to false
+	if ({_ipObject}.has("network") is true):
+		set {_network} to {_ipObject}.getAsJsonObject("network")
+
+		if all:
+			{_network}.has("type") is true
+			{_network}.get("type").getAsString() is not null
+			{_network}.get("type").getAsString() is set
+		then:
+			set {_mobile} to {_network}.get("type").getAsString().equalsIgnoreCase("Mobile")
+
+	send "&eInfos zur IP von Spieler '%{_target}'s name%':", "&f● &7Mobile Internet: %{_mobile}%", "&a● &7Proxy: %{_proxy}%", "&a● &7Tor: %{_tor}%", "&a● &7VPN: %{_vpn}%", "&d● &7Is the IP Hosted?: %{_hosting}%", "&c● &7Confidence: %{_confidence}%%%" to {_player}
+
+on tab complete of "/checkvpn":
+	set tab completions to all players
+
+command /checkvpn [<text>]:
+	prefix: sbstaff
+	permission: cwsb.staff.checkvpn
+	permission message: &2Server&8> &fNo Permission.
+	trigger:
+		if (arg-1 parsed as offline player has not played before):
+			send "&eNo player with this name has played!"
+			stop
+		checkVPN(player, arg-1 parsed as offline player)
